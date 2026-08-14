@@ -1,20 +1,25 @@
 import { useState } from "react";
-import { Volume2, Mic, MicOff, AlertTriangle } from "lucide-react";
+import { Volume2, Mic, MicOff, TriangleAlert as AlertTriangle, Sparkles } from "lucide-react";
 import { diffWords, getSpeechRecognition, speak, type DiffResult } from "../lib/speech";
+import { assessSpeaking, type AssessmentResult } from "../lib/api";
+import SpeakingFeedback from "./SpeakingFeedback";
 import type { Theme } from "../theme";
 
 export default function SpeakCard({
-  target, onResult, savedScore, theme,
-}: { target: string; onResult?: (diff: DiffResult) => void; savedScore?: number; theme: Theme }) {
+  target, onResult, savedScore, onXp, theme,
+}: { target: string; onResult?: (diff: DiffResult) => void; savedScore?: number; onXp?: (xp: number) => void; theme: Theme }) {
   const [status, setStatus] = useState<"idle" | "listening" | "done" | "error">("idle");
   const [result, setResult] = useState<{ transcript: string; diff: DiffResult } | null>(null);
   const [errMsg, setErrMsg] = useState("");
+  const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
+  const [assessing, setAssessing] = useState(false);
+  const [assessError, setAssessError] = useState("");
   const supported = !!getSpeechRecognition();
 
   const start = () => {
     const SR = getSpeechRecognition();
     if (!SR) return;
-    setStatus("listening"); setResult(null);
+    setStatus("listening"); setResult(null); setAssessment(null); setAssessError("");
     const rec = new SR();
     rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
     rec.onresult = (e: any) => {
@@ -29,6 +34,18 @@ export default function SpeakCard({
       setErrMsg(e.error === "not-allowed" ? "Microphone access was blocked." : e.error === "no-speech" ? "No speech detected — try again." : "Couldn't hear that clearly.");
     };
     try { rec.start(); } catch { setStatus("error"); setErrMsg("Couldn't start the microphone."); }
+  };
+
+  const getAssessment = async () => {
+    if (!result || assessing) return;
+    setAssessing(true); setAssessError("");
+    try {
+      const { assessment: a, xp } = await assessSpeaking(result.transcript, { target });
+      setAssessment(a);
+      onXp?.(xp);
+    } catch (err) {
+      setAssessError(err instanceof Error ? err.message : "Couldn't get feedback.");
+    } finally { setAssessing(false); }
   };
 
   const score = result?.diff.score ?? savedScore ?? null;
@@ -55,16 +72,28 @@ export default function SpeakCard({
             {status === "listening" ? "Listening…" : score !== null ? "Try again" : "Speak it"}
           </button>
           {score !== null && <span className="text-xs font-semibold font-mono" style={{ color: score >= 70 ? theme.cyan : theme.textDim }}>{score}% match</span>}
+          {status === "done" && result && !assessment && (
+            <button
+              onClick={getAssessment}
+              disabled={assessing}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all disabled:opacity-50 hover:scale-105"
+              style={{ backgroundColor: theme.chipBg, color: theme.cyan, border: `1px solid ${theme.chipBorder}` }}
+            >
+              <Sparkles size={12} /> {assessing ? "Analyzing…" : "AI feedback"}
+            </button>
+          )}
         </div>
       )}
       {status === "error" && <p className="text-xs mt-2" style={{ color: theme.coral }}>{errMsg}</p>}
-      {result && (
+      {assessError && <p className="text-xs mt-2" style={{ color: theme.coral }}>{assessError}</p>}
+      {result && !assessment && (
         <div className="mt-3 pt-3 border-t flex flex-wrap gap-1 animate-[fadeIn_0.3s_ease]" style={{ borderColor: theme.panelBorder }}>
           {result.diff.tokens.map((t, i) => (
             <span key={i} className="text-xs px-1.5 py-0.5 rounded" style={t.matched ? { color: theme.cyan, backgroundColor: `${theme.cyan}1A` } : { color: theme.coral, backgroundColor: `${theme.coral}1A`, textDecoration: "line-through" }}>{t.word}</span>
           ))}
         </div>
       )}
+      {assessment && <SpeakingFeedback assessment={assessment} theme={theme} />}
     </div>
   );
 }

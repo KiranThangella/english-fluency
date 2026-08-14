@@ -1,15 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Timer, Mic, MicOff, AlertTriangle, Shuffle } from "lucide-react";
+import { Timer, Mic, MicOff, TriangleAlert as AlertTriangle, Shuffle, Sparkles } from "lucide-react";
 import { FILLER_RE, getSpeechRecognition, normalizeWords } from "../lib/speech";
+import { assessSpeaking, type AssessmentResult } from "../lib/api";
+import SpeakingFeedback from "./SpeakingFeedback";
 import { FREE_SPEAK_BANK, LEVELS } from "../data/content";
 import type { Theme } from "../theme";
 
 export interface SessionMetrics { wpm: number; fillers: number; wordCount: number; }
 
 export default function FreeSpeakChallenge({
-  day, onComplete, theme,
+  day, onComplete, onXp, theme,
 }: {
-  day: number; onComplete: (day: number, metrics: SessionMetrics) => void; theme: Theme;
+  day: number; onComplete: (day: number, metrics: SessionMetrics) => void; onXp?: (xp: number) => void; theme: Theme;
 }) {
   const [level, setLevel] = useState<"beginner" | "intermediate" | "advanced">("beginner");
   const prompts = FREE_SPEAK_BANK.find((b) => b.level === level)!.prompts;
@@ -21,6 +23,9 @@ export default function FreeSpeakChallenge({
   const [transcript, setTranscript] = useState("");
   const [timeLeft, setTimeLeft] = useState(duration);
   const [metrics, setMetrics] = useState<SessionMetrics | null>(null);
+  const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
+  const [assessing, setAssessing] = useState(false);
+  const [assessError, setAssessError] = useState("");
   const recRef = useRef<any>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptRef = useRef("");
@@ -45,7 +50,7 @@ export default function FreeSpeakChallenge({
   const start = () => {
     const SR = getSpeechRecognition();
     if (!SR) return;
-    setTranscriptBoth(""); setTimeLeftBoth(duration); setStatus("recording"); setMetrics(null);
+    setTranscriptBoth(""); setTimeLeftBoth(duration); setStatus("recording"); setMetrics(null); setAssessment(null); setAssessError("");
     const rec = new SR();
     rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
     let finalText = "";
@@ -72,11 +77,23 @@ export default function FreeSpeakChallenge({
   }, []);
 
   const changeLevel = (lvl: "beginner" | "intermediate" | "advanced") => {
-    setLevel(lvl); setIndex(0); setStatus("idle"); setTranscriptBoth(""); setMetrics(null);
+    setLevel(lvl); setIndex(0); setStatus("idle"); setTranscriptBoth(""); setMetrics(null); setAssessment(null); setAssessError("");
   };
   const nextPrompt = () => {
     setIndex((i) => (i + 1) % prompts.length);
-    setStatus("idle"); setTranscriptBoth(""); setMetrics(null);
+    setStatus("idle"); setTranscriptBoth(""); setMetrics(null); setAssessment(null); setAssessError("");
+  };
+
+  const getAssessment = async () => {
+    if (!transcript || assessing) return;
+    setAssessing(true); setAssessError("");
+    try {
+      const { assessment: a, xp } = await assessSpeaking(transcript, { prompt });
+      setAssessment(a);
+      onXp?.(xp);
+    } catch (err) {
+      setAssessError(err instanceof Error ? err.message : "Couldn't get feedback.");
+    } finally { setAssessing(false); }
   };
 
   const usedVocab = vocab.filter((v) => {
@@ -131,6 +148,18 @@ export default function FreeSpeakChallenge({
             <span style={{ color: (metrics?.fillers ?? 0) > 2 ? theme.coral : theme.textDim }}>{metrics?.fillers ?? 0} filler words</span>
             <span style={{ color: theme.textDim }}>{usedVocab.length}/{vocab.length} target words</span>
           </div>
+          {!assessment && (
+            <button
+              onClick={getAssessment}
+              disabled={assessing}
+              className="mt-3 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all disabled:opacity-50 hover:scale-105"
+              style={{ backgroundColor: theme.chipBg, color: theme.cyan, border: `1px solid ${theme.chipBorder}` }}
+            >
+              <Sparkles size={12} /> {assessing ? "Analyzing your speech…" : "Get AI feedback"}
+            </button>
+          )}
+          {assessError && <p className="text-xs mt-2" style={{ color: theme.coral }}>{assessError}</p>}
+          {assessment && <SpeakingFeedback assessment={assessment} theme={theme} />}
         </div>
       )}
     </div>

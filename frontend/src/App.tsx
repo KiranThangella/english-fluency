@@ -1,9 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import {
-  Check, Flame, MapPin, Volume2, BookOpen, MessageCircle, Lightbulb,
-  ChevronDown, ChevronUp, Mic, Sparkles, AlertTriangle, Ear, Route,
-  PartyPopper, TrendingUp, Sun, Moon, Lock, Zap,
-} from "lucide-react";
+import { Check, Flame, MapPin, Volume2, BookOpen, MessageCircle, Lightbulb, ChevronDown, ChevronUp, Mic, Sparkles, TriangleAlert as AlertTriangle, Ear, Route, PartyPopper, TrendingUp, Sun, Moon, Lock, Zap } from "lucide-react";
 import { DARK, LIGHT } from "./theme";
 import { WEEKS, DAY_CONTENT, TOTAL_DAYS, LEVELS, levelForDay } from "./data/content";
 import { getSpeechRecognition, speak, type DiffResult } from "./lib/speech";
@@ -423,7 +419,7 @@ export default function App() {
                     <span className="text-xs font-mono" style={{ color: theme.textDim }}>{dayScoreCount}/{content.speakTargets.length} passed</span>
                   </div>
                   <div className="space-y-2.5">
-                    {content.speakTargets.map((t, i) => <SpeakCard key={i} target={t} savedScore={speakScores[`${selectedDay}-${i}`]} onResult={(diff) => handleSpeakResult(selectedDay, i, diff)} theme={theme} />)}
+                    {content.speakTargets.map((t, i) => <SpeakCard key={i} target={t} savedScore={speakScores[`${selectedDay}-${i}`]} onResult={(diff) => handleSpeakResult(selectedDay, i, diff)} onXp={(xp) => setUser((u) => (u ? { ...u, xp } : u))} theme={theme} />)}
                   </div>
                 </div>
 
@@ -435,7 +431,7 @@ export default function App() {
                 </div>
 
                 <DictationDrill theme={theme} />
-                <FreeSpeakChallenge day={selectedDay} onComplete={handleSessionComplete} theme={theme} />
+                <FreeSpeakChallenge day={selectedDay} onComplete={handleSessionComplete} onXp={(xp) => setUser((u) => (u ? { ...u, xp } : u))} theme={theme} />
                 <GrammarCheck theme={theme} onXp={(xp) => setUser((u) => (u ? { ...u, xp } : u))} />
 
                 <div className="flex items-start gap-2.5 pt-4 border-t" style={{ borderColor: theme.panelBorder }}>

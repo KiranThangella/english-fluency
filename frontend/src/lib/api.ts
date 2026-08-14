@@ -180,6 +180,25 @@ export async function checkGrammar(sentence: string): Promise<{ result: string; 
   return res.json();
 }
 
+// ---- Speaking assessment ----
+
+export interface AssessmentResult {
+  fluencyScore: number;
+  grammarScore: number;
+  vocabularyScore: number;
+  overallScore: number;
+  strengths: string[];
+  improvements: string[];
+  correctedVersion: string;
+  tip: string;
+}
+
+export async function assessSpeaking(transcript: string, opts?: { target?: string; prompt?: string }): Promise<{ assessment: AssessmentResult; xp: number }> {
+  const res = await authedFetch("/api/assessment", { method: "POST", body: JSON.stringify({ transcript, target: opts?.target, prompt: opts?.prompt }) });
+  if (!res.ok) throw new Error(await readError(res, "Couldn't get feedback"));
+  return res.json();
+}
+
 // ---- Leaderboard ----
 
 export interface LeaderboardEntry { nickname: string; xp: number; }

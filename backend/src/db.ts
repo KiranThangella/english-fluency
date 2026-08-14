@@ -179,18 +179,23 @@ db.exec(`
     day TEXT NOT NULL,
     chat_calls INTEGER NOT NULL DEFAULT 0,
     grammar_calls INTEGER NOT NULL DEFAULT 0,
+    assessment_calls INTEGER NOT NULL DEFAULT 0,
     tokens_used INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (user_id, day)
   );
 `);
 
+// Migration-safe: add assessment_calls to usage tables created before it existed.
+try { db.exec("ALTER TABLE usage ADD COLUMN assessment_calls INTEGER NOT NULL DEFAULT 0"); } catch { /* column already exists */ }
+
 export interface UsageRow {
   chat_calls: number;
   grammar_calls: number;
+  assessment_calls: number;
   tokens_used: number;
 }
 
-const EMPTY_USAGE: UsageRow = { chat_calls: 0, grammar_calls: 0, tokens_used: 0 };
+const EMPTY_USAGE: UsageRow = { chat_calls: 0, grammar_calls: 0, assessment_calls: 0, tokens_used: 0 };
 
 function today(): string {
   return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD", UTC
@@ -198,21 +203,21 @@ function today(): string {
 
 export function getTodayUsage(userId: string): UsageRow {
   const row = db
-    .prepare("SELECT chat_calls, grammar_calls, tokens_used FROM usage WHERE user_id = ? AND day = ?")
+    .prepare("SELECT chat_calls, grammar_calls, assessment_calls, tokens_used FROM usage WHERE user_id = ? AND day = ?")
     .get(userId, today()) as UsageRow | undefined;
   return row ?? EMPTY_USAGE;
 }
 
 /** Records one call of the given kind plus its token cost for today, and awards a small XP amount for the activity. */
-export function recordUsage(userId: string, kind: "chat" | "grammar", tokens: number): void {
-  const column = kind === "chat" ? "chat_calls" : "grammar_calls";
+export function recordUsage(userId: string, kind: "chat" | "grammar" | "assessment", tokens: number): void {
+  const column = kind === "chat" ? "chat_calls" : kind === "grammar" ? "grammar_calls" : "assessment_calls";
   db.prepare(
     `INSERT INTO usage (user_id, day, ${column}, tokens_used) VALUES (?, ?, 1, ?)
      ON CONFLICT(user_id, day) DO UPDATE SET
        ${column} = ${column} + 1,
        tokens_used = tokens_used + excluded.tokens_used`
   ).run(userId, today(), tokens);
-  addXp(userId, kind === "chat" ? 2 : 1);
+  addXp(userId, kind === "chat" ? 2 : kind === "grammar" ? 1 : 2);
 }
 
 /** Total tokens spent by a user across all time — handy for a lifetime cost view. */
