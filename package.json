@@ -2,13 +2,8 @@
   "name": "english-fluency",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "workspaces": [
-    "backend",
-    "frontend"
-  ],
   "scripts": {
-    "build": "npm run build --workspaces",
-    "dev": "npm run dev --workspace backend"
+    "build": "npm install --prefix backend && npm run build --prefix backend",
+    "start": "npm start --prefix backend"
   }
 }
